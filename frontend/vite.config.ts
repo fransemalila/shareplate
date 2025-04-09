@@ -5,5 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    open: true // This will automatically open the browser
   },
+  css: {
+    postcss: './postcss.config.js'
+  }
 }); 
