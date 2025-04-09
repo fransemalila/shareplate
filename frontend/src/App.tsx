@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RequestPasswordReset } from './components/auth/RequestPasswordReset';
 import { ResetPassword } from './components/auth/ResetPassword';
 import { ProfileManagement } from './components/auth/ProfileManagement';
+import './index.css';
 
 function App() {
   const { user, logout } = useAuth();

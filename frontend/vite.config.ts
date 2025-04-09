@@ -7,7 +7,16 @@ export default defineConfig({
     port: 3000,
     open: true // This will automatically open the browser
   },
+  resolve: {
+    alias: {
+      'mapbox-gl': 'mapbox-gl',
+    },
+  },
   css: {
-    postcss: './postcss.config.js'
+    preprocessorOptions: {
+      css: {
+        additionalData: `@import "mapbox-gl/dist/mapbox-gl.css";`,
+      },
+    },
   }
 }); 

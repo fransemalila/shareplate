@@ -6,15 +6,21 @@ export interface User {
   updatedAt: Date;
 }
 
+export interface Location {
+  lat: number;
+  lng: number;
+}
+
 export interface FoodListing {
   id: string;
   title: string;
   description: string;
   price: number;
-  location: string;
-  imageUrl: string;
-  userId: string;
-  user: User;
-  createdAt: Date;
-  updatedAt: Date;
+  images: string[];
+  sellerId: string;
+  available: boolean;
+  category: string;
+  location?: Location;
+  createdAt: string;
+  updatedAt: string;
 } 

@@ -1,16 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FoodListing } from '../../../shared/src/types';
+import { FoodListing, Location } from '../../types';
+import mapboxgl from 'mapbox-gl';
 
-// Import mapbox-gl dynamically to avoid SSR issues
-let mapboxgl: any;
-if (typeof window !== 'undefined') {
-  mapboxgl = require('mapbox-gl');
-  require('mapbox-gl/dist/mapbox-gl.css');
-}
-
-interface Location {
-  lat: number;
-  lng: number;
+// Initialize mapbox token
+if (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN) {
+  mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 }
 
 interface FoodListingMapProps {
@@ -27,24 +21,21 @@ const FoodListingMap: React.FC<FoodListingMapProps> = ({
   onMarkerClick,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<any>(null);
-  const markers = useRef<any[]>([]);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markers = useRef<mapboxgl.Marker[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [mapError, setMapError] = useState<string | null>(null);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   useEffect(() => {
-    if (!mapContainer.current || map.current || !mapboxgl) return;
+    if (!mapContainer.current || map.current) return;
 
     try {
-      // Set access token
-      const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-      if (!token) {
+      if (!mapboxgl.accessToken) {
         setMapError('Mapbox access token is missing. Please check your environment variables.');
         return;
       }
-      mapboxgl.accessToken = token;
 
-      // Initialize map
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/streets-v11',
@@ -52,10 +43,12 @@ const FoodListingMap: React.FC<FoodListingMapProps> = ({
         zoom: zoom
       });
 
-      // Add navigation controls
+      map.current.on('load', () => {
+        setIsMapLoaded(true);
+      });
+
       map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
 
-      // Cleanup
       return () => {
         if (map.current) {
           map.current.remove();
@@ -66,7 +59,7 @@ const FoodListingMap: React.FC<FoodListingMapProps> = ({
       setMapError('Failed to initialize map. Please check your Mapbox configuration.');
       console.error('Map initialization error:', error);
     }
-  }, []);
+  }, [center.lat, center.lng, zoom]);
 
   // Update markers when listings change
   useEffect(() => {

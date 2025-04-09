@@ -1,7 +1,7 @@
 import React from 'react';
 import FoodCard from './FoodCard';
 import Rating from '../common/Rating';
-import { FoodListing } from '../../../shared/src/types';
+import { FoodListing } from '../../types';
 
 interface FoodListingGridProps {
   listings: FoodListing[];
@@ -17,7 +17,7 @@ const FoodListingGrid: React.FC<FoodListingGridProps> = ({
       {listings.map((listing) => (
         <div
           key={listing.id}
-          className="flex flex-col"
+          className="flex flex-col cursor-pointer"
           onClick={() => onListingClick?.(listing)}
         >
           <FoodCard
@@ -26,9 +26,9 @@ const FoodListingGrid: React.FC<FoodListingGridProps> = ({
             price={listing.price}
             image={listing.images[0]}
             seller={listing.sellerId}
-            location="Location" // TODO: Add location to FoodListing type
+            location={listing.location}
           />
-          <div className="mt-2">
+          <div className="mt-2 px-4">
             <Rating value={4.5} readonly size="small" />
           </div>
         </div>
