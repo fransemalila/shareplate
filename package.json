@@ -1,0 +1,25 @@
+{
+  "name": "shareplate",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "mobile",
+    "shared"
+  ],
+  "scripts": {
+    "backend:dev": "yarn workspace backend dev",
+    "frontend:dev": "yarn workspace frontend dev",
+    "mobile:dev": "yarn workspace mobile start",
+    "test": "yarn workspaces run test",
+    "lint": "yarn workspaces run lint"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^2.8.0",
+    "typescript": "^4.9.0"
+  }
+} 
