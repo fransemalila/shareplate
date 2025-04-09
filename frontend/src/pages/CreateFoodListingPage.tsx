@@ -1,37 +1,33 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FoodListingForm from '../components/food/FoodListingForm';
+import { FoodListing } from '../types';
 import { api } from '../services/api';
-
-interface FormData {
-  title: string;
-  description: string;
-  price: number;
-  category: string;
-  images: File[];
-}
 
 const CreateFoodListingPage: React.FC = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (data: FormData) => {
+  const handleSubmit = async (data: Partial<FoodListing>) => {
     try {
       setIsSubmitting(true);
       setError(null);
 
-      // Upload images first
-      const imageUrls = await api.uploadImages(data.images);
-
-      // Create the listing
+      // Create the listing with all the new fields
       const listing = await api.createFoodListing({
         ...data,
-        images: data.images, // Pass the actual File objects
+        status: data.isDraft ? 'draft' : (data.status || 'active'),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
 
-      // Navigate to the new listing page
-      navigate(`/listings/${listing.id}`);
+      // Navigate to the appropriate page based on draft status
+      if (data.isDraft) {
+        navigate('/listings/drafts');
+      } else {
+        navigate(`/listings/${listing.id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while creating the listing');
       console.error('Error creating listing:', err);
@@ -93,7 +89,7 @@ const CreateFoodListingPage: React.FC = () => {
 
           <FoodListingForm
             onSubmit={handleSubmit}
-            isSubmitting={isSubmitting}
+            isLoading={isSubmitting}
           />
         </div>
       </div>

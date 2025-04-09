@@ -4,7 +4,7 @@ import FoodListingHeader from '../components/food/FoodListingHeader';
 import FoodListingFilters from '../components/food/FoodListingFilters';
 import FoodListingGrid from '../components/food/FoodListingGrid';
 import NoListings from '../components/food/NoListings';
-import { FoodListing } from '../../../shared/src/types';
+import { FoodListing } from '../../types';
 import { api } from '../services/api';
 import FoodListingStats from '../components/food/FoodListingStats';
 import FoodListingMap from '../components/food/FoodListingMap';
@@ -18,13 +18,9 @@ const FoodListingsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [listings, setListings] = useState<FoodListing[]>([]);
   const [filteredListings, setFilteredListings] = useState<FoodListing[]>([]);
-  const [stats, setStats] = useState({
-    totalListings: 0,
-    activeListings: 0,
-    averageRating: 0,
-    totalOrders: 0
-  });
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('active');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [mapCenter, setMapCenter] = useState({
     lat: 40.7128,
     lng: -74.0060
@@ -40,6 +36,13 @@ const FoodListingsPage: React.FC = () => {
     { id: 'drinks', name: 'Drinks', icon: '☕', count: 0 }
   ];
 
+  const statuses = [
+    { id: 'all', name: 'All' },
+    { id: 'active', name: 'Active' },
+    { id: 'sold', name: 'Sold' },
+    { id: 'expired', name: 'Expired' }
+  ];
+
   useEffect(() => {
     fetchListings();
   }, []);
@@ -51,61 +54,57 @@ const FoodListingsPage: React.FC = () => {
       
       // Use mock data for testing
       const response = { listings: mockFoodListings };
-      setListings(response.listings);
       
-      // Calculate stats
-      const activeListings = response.listings.filter(l => l.available).length;
-      const avgRating = 4.5; // Mock rating
-      const totalOrders = response.listings.length * 2; // Mock orders
-      
-      setStats({
-        totalListings: response.listings.length,
-        activeListings,
-        averageRating: avgRating,
-        totalOrders
-      });
-
-      // Update category counts
-      updateCategoryCounts(response.listings);
+      // Filter out draft listings from the main view
+      const nonDraftListings = response.listings.filter(listing => !listing.isDraft);
+      setListings(nonDraftListings);
       
       // Initial filtering
-      filterListings(selectedCategory, response.listings);
+      filterListings(selectedCategory, selectedStatus, selectedTags, nonDraftListings);
       
       // Update map center if listings have locations
-      updateMapCenter(response.listings);
+      updateMapCenter(nonDraftListings);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while fetching listings');
     } finally {
-      // Add a small delay to simulate network request
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 1000);
+      setTimeout(() => setIsLoading(false), 1000);
     }
   };
 
-  const updateCategoryCounts = (listings: FoodListing[]) => {
-    const counts = listings.reduce((acc, listing) => {
-      const category = listing.category || 'uncategorized';
-      acc[category] = (acc[category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+  const filterListings = (
+    categoryId: string,
+    status: string,
+    tags: string[],
+    listingsToFilter = listings
+  ) => {
+    let filtered = listingsToFilter;
 
-    categories.forEach(category => {
-      if (category.id === 'all') {
-        category.count = listings.length;
-      } else {
-        category.count = counts[category.id] || 0;
-      }
+    // Filter by category
+    if (categoryId !== 'all') {
+      filtered = filtered.filter(listing => listing.category === categoryId);
+    }
+
+    // Filter by status
+    if (status !== 'all') {
+      filtered = filtered.filter(listing => listing.status === status);
+    }
+
+    // Filter by tags
+    if (tags.length > 0) {
+      filtered = filtered.filter(listing =>
+        tags.every(tag => listing.tags.some(t => t.name === tag))
+      );
+    }
+
+    // Filter out expired listings
+    filtered = filtered.filter(listing => {
+      if (listing.status === 'expired') return false;
+      if (!listing.expiresAt) return true;
+      return new Date(listing.expiresAt) > new Date();
     });
-  };
 
-  const filterListings = (categoryId: string, listingsToFilter = listings) => {
-    if (categoryId === 'all') {
-      setFilteredListings(listingsToFilter);
-    } else {
-      setFilteredListings(listingsToFilter.filter(listing => listing.category === categoryId));
-    }
+    setFilteredListings(filtered);
   };
 
   const updateMapCenter = (listings: FoodListing[]) => {
@@ -119,11 +118,32 @@ const FoodListingsPage: React.FC = () => {
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
-    filterListings(categoryId);
+    filterListings(categoryId, selectedStatus, selectedTags);
+  };
+
+  const handleStatusSelect = (status: string) => {
+    setSelectedStatus(status);
+    filterListings(selectedCategory, status, selectedTags);
+  };
+
+  const handleTagSelect = (tag: string) => {
+    const newTags = selectedTags.includes(tag)
+      ? selectedTags.filter(t => t !== tag)
+      : [...selectedTags, tag];
+    setSelectedTags(newTags);
+    filterListings(selectedCategory, selectedStatus, newTags);
   };
 
   const handleListingClick = (listing: FoodListing) => {
     navigate(`/listings/${listing.id}`);
+  };
+
+  const handleCreateListing = () => {
+    navigate('/listings/new');
+  };
+
+  const handleViewDrafts = () => {
+    navigate('/listings/drafts');
   };
 
   if (error) {
@@ -159,20 +179,39 @@ const FoodListingsPage: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Stats Section */}
-      <FoodListingStats
-        totalListings={stats.totalListings}
-        activeListings={stats.activeListings}
-        averageRating={stats.averageRating}
-        totalOrders={stats.totalOrders}
-      />
+      {/* Header with Actions */}
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Food Listings</h1>
+        <div className="flex gap-4">
+          <button
+            onClick={handleViewDrafts}
+            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          >
+            View Drafts
+          </button>
+          <button
+            onClick={handleCreateListing}
+            className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+          >
+            Create Listing
+          </button>
+        </div>
+      </div>
 
-      {/* Categories Section */}
-      <FoodListingCategories
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategorySelect={handleCategorySelect}
-      />
+      {/* Filters Section */}
+      <div className="mb-8">
+        <FoodListingFilters
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onCategorySelect={handleCategorySelect}
+          statuses={statuses}
+          selectedStatus={selectedStatus}
+          onStatusSelect={handleStatusSelect}
+          tags={Array.from(new Set(listings.flatMap(l => l.tags.map(t => t.name))))}
+          selectedTags={selectedTags}
+          onTagSelect={handleTagSelect}
+        />
+      </div>
 
       {/* Map Section */}
       <div className="mb-8">
@@ -194,8 +233,8 @@ const FoodListingsPage: React.FC = () => {
         />
       ) : (
         <NoListings
-          message={`No ${selectedCategory !== 'all' ? categories.find(c => c.id === selectedCategory)?.name.toLowerCase() : ''} listings available`}
-          onCreateListing={() => navigate('/listings/new')}
+          message="No listings match your filters"
+          onCreateListing={handleCreateListing}
         />
       )}
     </div>
