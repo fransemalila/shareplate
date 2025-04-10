@@ -89,5 +89,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-Your Name - [@franseco_malila](https://twitter.com/fransessco_malila)
+Your Name - [@fransesco_malila](https://twitter.com/fransessco_malila)
 Project Link: [https://github.com/fransemalila/shareplate](https://github.com/fransemalila/shareplate)
