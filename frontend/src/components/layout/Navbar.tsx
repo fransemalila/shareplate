@@ -23,6 +23,12 @@ const Navbar: React.FC = () => {
               Share Food
             </Link>
             <Link
+              to="/register"
+              className="text-gray-700 hover:text-green-600"
+            >
+              Sign up
+            </Link>
+            <Link
               to="/login"
               className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
             >
@@ -77,6 +83,12 @@ const Navbar: React.FC = () => {
             className="block px-3 py-2 rounded-md text-gray-700 hover:text-green-600 hover:bg-green-50"
           >
             Share Food
+          </Link>
+          <Link
+            to="/register"
+            className="block px-3 py-2 rounded-md text-gray-700 hover:text-green-600 hover:bg-green-50"
+          >
+            Sign up
           </Link>
           <Link
             to="/login"

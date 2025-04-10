@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FoodListing } from '../types';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import FoodListingHeader from '../components/food/FoodListingHeader';
 import { FoodListingFilters } from '../components/food/FoodListingFilters';
 import FoodListingGrid from '../components/food/FoodListingGrid';
@@ -12,6 +13,7 @@ import FoodListingMap from '../components/food/FoodListingMap';
 
 const FoodListingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [listings, setListings] = useState<FoodListing[]>([]);
@@ -33,11 +35,17 @@ const FoodListingsPage: React.FC = () => {
   const [mapZoom, setMapZoom] = useState(12);
 
   useEffect(() => {
-    fetchListings();
-    fetchRecommendedListings();
-    fetchTrendingListings();
-    getUserLocation();
-  }, []);
+    if (!authLoading) {
+      if (!user) {
+        navigate('/login', { state: { from: '/browse' } });
+      } else {
+        fetchListings();
+        fetchRecommendedListings();
+        fetchTrendingListings();
+        getUserLocation();
+      }
+    }
+  }, [authLoading, user]);
 
   const getUserLocation = () => {
     if (navigator.geolocation) {
