@@ -1,0 +1,154 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        directory: ['backend', 'frontend', 'mobile']
+        
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: ${{ matrix.directory }}
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: ${{ matrix.directory }}
+        run: npm audit
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'shareplate-${{ matrix.directory }}'
+          path: ${{ matrix.directory }}
+          format: 'HTML'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+
+      - name: Run Snyk Security Scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+          args: --all-projects
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report-${{ matrix.directory }}
+          path: |
+            dependency-check-report.html
+            snyk-report.json
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: security-scan
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build Backend Image
+        run: docker build -t shareplate-backend:${{ github.sha }} backend/
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'shareplate-backend:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  code-scanning:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript, typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+  security-report:
+    name: Generate Security Report
+    needs: [security-scan, container-scan, secret-scan, code-scanning]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download Security Reports
+        uses: actions/download-artifact@v3
+        with:
+          path: security-reports
+
+      - name: Generate Combined Report
+        run: |
+          echo "# Security Scan Results" > combined-report.md
+          echo "## Dependency Checks" >> combined-report.md
+          find security-reports -name "dependency-check-report.html" -exec cat {} >> combined-report.md \;
+          echo "## Container Scan" >> combined-report.md
+          find security-reports -name "trivy-results.json" -exec cat {} >> combined-report.md \;
+
+      - name: Upload Combined Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: combined-security-report
+          path: combined-report.md
+
+      - name: Send Notification
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Security Scan Failed',
+              body: 'Security scan has detected critical vulnerabilities. Please check the security report.',
+              labels: ['security', 'critical']
+            }); 

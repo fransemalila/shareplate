@@ -1,11 +1,19 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/user';
+import { User, IUser } from '../models/user';
 import { sendEmail } from '../services/email';
 import { generateToken } from '../utils/token';
+import { AuthError } from '../types/errors';
+import { config } from '../config';
 
-// Register new user
+/**
+ * Register new user
+ * Handles user registration with email verification
+ * @param {Request} req - Express request object containing user registration data
+ * @param {Response} res - Express response object
+ * @returns {Promise<void>} - Promise that resolves when registration is complete
+ */
 export const register = async (req: Request, res: Response) => {
   try {
     const { email, password, name } = req.body;
@@ -17,7 +25,7 @@ export const register = async (req: Request, res: Response) => {
     }
 
     // Hash password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(config.security.bcryptRounds);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create verification token
@@ -37,14 +45,14 @@ export const register = async (req: Request, res: Response) => {
     await sendEmail({
       to: email,
       subject: 'Verify your email',
-      text: `Please verify your email by clicking this link: ${process.env.FRONTEND_URL}/verify-email/${verificationToken}`,
+      text: `Please verify your email by clicking this link: ${config.frontendUrl}/verify-email/${verificationToken}`,
     });
 
     // Generate JWT
     const token = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET!,
-      { expiresIn: '1d' }
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn }
     );
 
     res.status(201).json({
@@ -59,6 +67,9 @@ export const register = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
+    if (error instanceof AuthError) {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Error registering user' });
   }
 };
@@ -188,25 +199,41 @@ export const refreshToken = async (req: Request, res: Response) => {
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({ message: 'Token is required' });
+      throw new AuthError('Token is required');
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    // Verify the existing token
+    const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
+    
     const user = await User.findById(decoded.userId);
-
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      throw new AuthError('User not found');
     }
 
+    // Generate new token
     const newToken = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET!,
-      { expiresIn: '1d' }
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn }
     );
 
-    res.json({ token: newToken });
+    res.json({
+      token: newToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isEmailVerified: user.isEmailVerified,
+      },
+    });
   } catch (error) {
     console.error('Token refresh error:', error);
-    res.status(401).json({ message: 'Invalid token' });
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+    if (error instanceof AuthError) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({ message: 'Error refreshing token' });
   }
 }; 

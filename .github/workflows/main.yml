@@ -1,0 +1,304 @@
+name: SharePlate CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  RUBY_VERSION: '3.0'
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run Linting
+        working-directory: backend
+        run: npm run lint
+
+      - name: Run Type Check
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Run Tests
+        working-directory: backend
+        run: npm run test
+        env:
+          MONGODB_URI: mongodb://localhost:27017/shareplate_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test_secret
+          NODE_ENV: test
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Linting
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run Type Check
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Run Tests
+        working-directory: frontend
+        run: npm run test
+
+  mobile-test:
+    name: Mobile Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+
+      - name: Install Dependencies
+        working-directory: mobile
+        run: |
+          npm ci
+          gem install fastlane
+
+      - name: Run Linting
+        working-directory: mobile
+        run: npm run lint
+
+      - name: Run Type Check
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Run Tests
+        working-directory: mobile
+        run: npm run test
+
+  build-backend:
+    name: Build Backend
+    needs: backend-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Build
+        working-directory: backend
+        run: npm run build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist
+
+  build-frontend:
+    name: Build Frontend
+    needs: frontend-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+  build-mobile:
+    name: Build Mobile Apps
+    needs: mobile-test
+    runs-on: macos-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+
+      - name: Install Dependencies
+        working-directory: mobile
+        run: |
+          npm ci
+          gem install fastlane
+          cd ios && pod install && cd ..
+
+      - name: Build iOS
+        working-directory: mobile
+        run: fastlane ios beta
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
+
+      - name: Build Android
+        working-directory: mobile
+        run: fastlane android beta
+        env:
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Backend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist
+
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to Staging
+        run: |
+          # Deploy backend to ECS
+          aws ecs update-service --cluster shareplate-staging --service backend --force-new-deployment
+          
+          # Deploy frontend to S3/CloudFront
+          aws s3 sync frontend/dist s3://${{ secrets.STAGING_S3_BUCKET }} --delete
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.STAGING_CF_DISTRIBUTION }} --paths "/*"
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Backend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist
+
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to Production
+        run: |
+          # Deploy backend to ECS
+          aws ecs update-service --cluster shareplate-production --service backend --force-new-deployment
+          
+          # Deploy frontend to S3/CloudFront
+          aws s3 sync frontend/dist s3://${{ secrets.PRODUCTION_S3_BUCKET }} --delete
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.PRODUCTION_CF_DISTRIBUTION }} --paths "/*" 
