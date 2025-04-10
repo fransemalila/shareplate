@@ -1,42 +1,62 @@
-import { defineConfig } from 'vite';
+import { defineConfig, UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { configDefaults } from 'vitest/config';
-import { VitePWA } from 'vite-plugin-pwa';
+import { VitePWA, VitePWAOptions } from 'vite-plugin-pwa';
 
-export default defineConfig({
+const pwaConfig: VitePWAOptions = {
+  registerType: 'autoUpdate',
+  includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
+  manifest: {
+    name: 'SharePlate',
+    short_name: 'SharePlate',
+    description: 'Share and discover homemade food in your community',
+    theme_color: '#ffffff',
+    icons: [
+      {
+        src: '/android-chrome-192x192.png',
+        sizes: '192x192',
+        type: 'image/png'
+      },
+      {
+        src: '/android-chrome-512x512.png',
+        sizes: '512x512',
+        type: 'image/png'
+      }
+    ]
+  },
+  injectRegister: 'auto',
+  minify: true,
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+    runtimeCaching: [
+      {
+        urlPattern: /^https:\/\/api\.shareplate\.com\/.*/i,
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'api-cache',
+          expiration: {
+            maxEntries: 100,
+            maxAgeSeconds: 60 * 60 * 24 // 24 hours
+          }
+        }
+      }
+    ]
+  }
+};
+
+const config: UserConfig = {
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
-      manifest: {
-        name: 'SharePlate',
-        short_name: 'SharePlate',
-        theme_color: '#ffffff',
-        icons: [
-          {
-            src: '/android-chrome-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/android-chrome-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
-    })
+    VitePWA(pwaConfig)
   ],
   server: {
     port: 3003,
     strictPort: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_URL || 'http://localhost:8005',
         changeOrigin: true,
-        secure: false,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
     },
@@ -48,15 +68,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: process.env.VITE_ENVIRONMENT === 'development',
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['@headlessui/react', '@heroicons/react']
+          ui: ['@headlessui/react', '@heroicons/react'],
+          utils: ['axios', 'date-fns', 'lodash']
         }
       }
-    }
+    },
+    chunkSizeWarningLimit: 1000
   },
   test: {
     globals: true,
@@ -64,9 +86,14 @@ export default defineConfig({
     setupFiles: ['./src/setupTests.ts'],
     exclude: [...configDefaults.exclude, '**/e2e/**'],
     coverage: {
-      provider: 'c8',
+      provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'src/setupTests.ts']
+      exclude: [
+        ...configDefaults.coverage.exclude,
+        'src/setupTests.ts',
+      ]
     }
   }
-}); 
+};
+
+export default config; 

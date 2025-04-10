@@ -2,13 +2,48 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SharePlate</title>
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="SharePlate - Share and discover homemade food in your community" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://shareplate.com/" />
+    <meta property="og:title" content="SharePlate - Community Food Sharing" />
+    <meta property="og:description" content="Share and discover homemade food in your community" />
+    <meta property="og:image" content="/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://shareplate.com/" />
+    <meta property="twitter:title" content="SharePlate - Community Food Sharing" />
+    <meta property="twitter:description" content="Share and discover homemade food in your community" />
+    <meta property="twitter:image" content="/og-image.png" />
+
+    <!-- PWA -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Preconnect to API -->
+    <link rel="preconnect" href="%VITE_API_URL%" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <title>SharePlate - Community Food Sharing</title>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; text-align: center;">
+        <h1>JavaScript Required</h1>
+        <p>We're sorry, but SharePlate requires JavaScript to function properly. Please enable JavaScript to continue.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html> 

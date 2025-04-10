@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /browse
+Allow: /help
+Allow: /about
+Disallow: /admin/
+Disallow: /profile/
+Disallow: /settings/
+Disallow: /api/
+
+Sitemap: https://shareplate.com/sitemap.xml 

@@ -1,8 +1,12 @@
-import React from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import ErrorBoundary from './components/ErrorBoundary';
+import { ErrorBoundary } from 'react-error-boundary';
+import { useAuth } from './contexts/AuthContext';
+import { ErrorPage } from './pages/ErrorPage';
+import LoadingSpinner from './components/common/LoadingSpinner';
 import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import Navbar from './components/layout/Navbar';
 import FoodListingsPage from './pages/FoodListingsPage';
 import { LoginPage } from './pages/LoginPage';
@@ -13,12 +17,6 @@ import { ProfileManagement } from './components/auth/ProfileManagement';
 import SecuritySettingsPage from './pages/SecuritySettingsPage';
 import HelpPage from './pages/HelpPage';
 import SupportPage from './pages/SupportPage';
-import AdminLayout from './components/layout/AdminLayout';
-import DashboardPage from './pages/admin/DashboardPage';
-import UsersPage from './pages/admin/UsersPage';
-import ContentPage from './pages/admin/ContentPage';
-import AnalyticsPage from './pages/admin/AnalyticsPage';
-import SettingsPage from './pages/admin/SettingsPage';
 import CreateFoodListingPage from './pages/CreateFoodListingPage';
 import './index.css';
 
@@ -34,94 +32,92 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 };
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Layout><FoodListingsPage /></Layout>
-  },
-  {
-    path: "/browse",
-    element: <Layout><FoodListingsPage /></Layout>
-  },
-  {
-    path: "/share",
-    element: <Layout><CreateFoodListingPage /></Layout>
-  },
-  {
-    path: "/login",
-    element: <Layout><LoginPage /></Layout>
-  },
-  {
-    path: "/register",
-    element: <Layout><RegisterPage /></Layout>
-  },
-  {
-    path: "/request-password-reset",
-    element: <Layout><RequestPasswordReset /></Layout>
-  },
-  {
-    path: "/reset-password/:token",
-    element: <Layout><ResetPassword /></Layout>
-  },
-  {
-    path: "/profile",
-    element: <Layout><ProfileManagement /></Layout>
-  },
-  {
-    path: "/settings/security",
-    element: <Layout><SecuritySettingsPage /></Layout>
-  },
-  {
-    path: "/help",
-    element: <Layout><HelpPage /></Layout>
-  },
-  {
-    path: "/support",
-    element: <Layout><SupportPage /></Layout>
-  },
-  {
-    path: "/admin",
-    element: <Layout><AdminLayout /></Layout>,
-    children: [
-      {
-        index: true,
-        element: <DashboardPage />
-      },
-      {
-        path: "users",
-        element: <UsersPage />
-      },
-      {
-        path: "content",
-        element: <ContentPage />
-      },
-      {
-        path: "analytics",
-        element: <AnalyticsPage />
-      },
-      {
-        path: "settings",
-        element: <SettingsPage />
-      },
-      {
-        path: "support",
-        element: <SupportPage />
-      }
-    ]
-  }
-], {
-  future: {
-    v7_startTransition: true,
-    v7_relativeSplatPath: true,
-    v7_normalizeFormMethod: true
-  }
-});
+// Lazy loaded admin components
+const AdminLayout = lazy(() => import('./components/layout/AdminLayout'));
+const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'));
+const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
+const ContentPage = lazy(() => import('./pages/admin/ContentPage'));
+const AnalyticsPage = lazy(() => import('./pages/admin/AnalyticsPage'));
+const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
+
+// Error Fallback Component
+const ErrorFallback = ({ error, resetErrorBoundary }) => (
+  <div className="min-h-screen flex items-center justify-center px-4 py-16">
+    <div className="text-center">
+      <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+        Something went wrong
+      </h2>
+      <p className="text-gray-600 mb-6">{error.message}</p>
+      <button
+        onClick={resetErrorBoundary}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+      >
+        Try again
+      </button>
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
+  const { user, isLoading } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
   return (
-    <ErrorBoundary>
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <Routes>
+          <Route path="/" element={<Layout />} errorElement={<ErrorPage />}>
+            <Route index element={<FoodListingsPage />} />
+            <Route path="login" element={<LoginPage />} />
+            <Route path="register" element={<RegisterPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            
+            {/* Admin Routes */}
+            {isAdmin && (
+              <Route
+                path="admin"
+                element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <AdminLayout />
+                  </Suspense>
+                }
+              >
+                <Route index element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <DashboardPage />
+                  </Suspense>
+                } />
+                <Route path="users" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <UsersPage />
+                  </Suspense>
+                } />
+                <Route path="content" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <ContentPage />
+                  </Suspense>
+                } />
+                <Route path="analytics" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <AnalyticsPage />
+                  </Suspense>
+                } />
+                <Route path="settings" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <SettingsPage />
+                  </Suspense>
+                } />
+              </Route>
+            )}
+
+            {/* Catch-all route for 404 */}
+            <Route path="*" element={<ErrorPage />} />
+          </Route>
+        </Routes>
       </AuthProvider>
     </ErrorBoundary>
   );

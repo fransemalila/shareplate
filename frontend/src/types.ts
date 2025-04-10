@@ -9,11 +9,11 @@ export interface User {
   isPhoneVerified: boolean;
   twoFactorAuth: {
     enabled: boolean;
-    method: 'sms' | 'app' | null;
+    method: 'email' | 'sms' | 'authenticator';
   };
   privacySettings: {
-    showEmail: boolean;
-    showPhone: boolean;
+    shareEmail: boolean;
+    sharePhone: boolean;
     showLocation: boolean;
   };
   status: 'active' | 'suspended' | 'banned';
@@ -291,7 +291,7 @@ export interface Report {
 
 export interface FAQCategory {
   id: string;
-  title: string;
+  name: string;
   description: string;
   order: number;
 }

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { FoodListing, User, NotificationPreferences } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8005/api';
 
 interface FoodListingFilters {
   category?: string;

@@ -4,6 +4,8 @@ import { SecurityService } from '../services/securityService';
 import { TwoFactorAuth, PrivacySettings, UserSession, DeviceInfo } from '../types';
 import Button from '../components/common/Button';
 
+const securityService = new SecurityService();
+
 const SecuritySettingsPage: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'2fa' | 'privacy' | 'sessions' | 'devices' | 'activity' | 'export'>('2fa');
@@ -16,8 +18,6 @@ const SecuritySettingsPage: React.FC = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [exportStatus, setExportStatus] = useState<'idle' | 'pending' | 'ready' | 'failed'>('idle');
   const [exportUrl, setExportUrl] = useState<string | null>(null);
-
-  const securityService = new SecurityService(/* pass your axios instance here */);
 
   useEffect(() => {
     loadData();
@@ -309,9 +309,13 @@ const SecuritySettingsPage: React.FC = () => {
                 {exportStatus === 'ready' && exportUrl && (
                   <div>
                     <p className="text-green-600 mb-2">Your data is ready!</p>
-                    <Button as="a" href={exportUrl} download>
+                    <a
+                      href={exportUrl}
+                      download
+                      className="inline-flex items-center justify-center rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors bg-green-600 text-white hover:bg-green-700 focus:ring-green-500 px-4 py-2 text-base"
+                    >
                       Download Data
-                    </Button>
+                    </a>
                   </div>
                 )}
                 {exportStatus === 'failed' && (
