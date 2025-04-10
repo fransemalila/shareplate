@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FoodListingHeader from '../components/food/FoodListingHeader';
-import FoodListingFilters from '../components/food/FoodListingFilters';
-import FoodListingGrid from '../components/food/FoodListingGrid';
-import NoListings from '../components/food/NoListings';
-import { FoodListing } from '../../types';
+import { FoodListing } from '../types';
 import { api } from '../services/api';
-import FoodListingStats from '../components/food/FoodListingStats';
+import FoodListingHeader from '../components/food/FoodListingHeader';
+import { FoodListingFilters } from '../components/food/FoodListingFilters';
+import FoodListingGrid from '../components/food/FoodListingGrid';
+import { FoodCategories } from '../components/food/FoodCategories';
+import { SavedSearches } from '../components/food/SavedSearches';
+import { RecommendedListings } from '../components/food/RecommendedListings';
 import FoodListingMap from '../components/food/FoodListingMap';
-import FoodListingCategories from '../components/food/FoodListingCategories';
-import FoodListingSkeleton from '../components/food/FoodListingSkeleton';
-import { mockFoodListings } from '../mocks/foodListings';
 
 const FoodListingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,154 +16,133 @@ const FoodListingsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [listings, setListings] = useState<FoodListing[]>([]);
   const [filteredListings, setFilteredListings] = useState<FoodListing[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('active');
+  const [recommendedListings, setRecommendedListings] = useState<FoodListing[]>([]);
+  const [trendingListings, setTrendingListings] = useState<FoodListing[]>([]);
+  
+  // Filter states
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [mapCenter, setMapCenter] = useState({
-    lat: 40.7128,
-    lng: -74.0060
-  });
-
-  const categories = [
-    { id: 'all', name: 'All', icon: '🍽️', count: 0 },
-    { id: 'homemade', name: 'Homemade', icon: '🏠', count: 0 },
-    { id: 'restaurant', name: 'Restaurant', icon: '🍽️', count: 0 },
-    { id: 'grocery', name: 'Grocery', icon: '🛒', count: 0 },
-    { id: 'bakery', name: 'Bakery', icon: '🥖', count: 0 },
-    { id: 'desserts', name: 'Desserts', icon: '🍰', count: 0 },
-    { id: 'drinks', name: 'Drinks', icon: '☕', count: 0 }
-  ];
-
-  const statuses = [
-    { id: 'all', name: 'All' },
-    { id: 'active', name: 'Active' },
-    { id: 'sold', name: 'Sold' },
-    { id: 'expired', name: 'Expired' }
-  ];
+  const [location, setLocation] = useState('');
+  const [radius, setRadius] = useState(5);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
+  const [sortBy, setSortBy] = useState('relevance');
+  
+  // Map state
+  const [mapCenter, setMapCenter] = useState({ lat: 0, lng: 0 });
+  const [mapZoom, setMapZoom] = useState(12);
 
   useEffect(() => {
     fetchListings();
+    fetchRecommendedListings();
+    fetchTrendingListings();
+    getUserLocation();
   }, []);
+
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setMapCenter({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        () => {
+          // Default location if user denies permission
+          setMapCenter({ lat: 51.5074, lng: -0.1278 }); // London coordinates
+        }
+      );
+    }
+  };
 
   const fetchListings = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Use mock data for testing
-      const response = { listings: mockFoodListings };
-      
-      // Filter out draft listings from the main view
-      const nonDraftListings = response.listings.filter(listing => !listing.isDraft);
-      setListings(nonDraftListings);
-      
-      // Initial filtering
-      filterListings(selectedCategory, selectedStatus, selectedTags, nonDraftListings);
-      
-      // Update map center if listings have locations
-      updateMapCenter(nonDraftListings);
-      
+      const response = await api.getFoodListings({
+        category: selectedCategory || undefined,
+        status: selectedStatus || undefined,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        location: mapCenter,
+        radius,
+        priceRange: {
+          min: priceRange[0],
+          max: priceRange[1]
+        },
+        sortBy
+      });
+      setListings(response.listings);
+      setFilteredListings(response.listings);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching listings');
+      setError(err instanceof Error ? err.message : 'Failed to fetch listings');
     } finally {
-      setTimeout(() => setIsLoading(false), 1000);
+      setIsLoading(false);
     }
   };
 
-  const filterListings = (
-    categoryId: string,
-    status: string,
-    tags: string[],
-    listingsToFilter = listings
-  ) => {
-    let filtered = listingsToFilter;
-
-    // Filter by category
-    if (categoryId !== 'all') {
-      filtered = filtered.filter(listing => listing.category === categoryId);
-    }
-
-    // Filter by status
-    if (status !== 'all') {
-      filtered = filtered.filter(listing => listing.status === status);
-    }
-
-    // Filter by tags
-    if (tags.length > 0) {
-      filtered = filtered.filter(listing =>
-        tags.every(tag => listing.tags.some(t => t.name === tag))
-      );
-    }
-
-    // Filter out expired listings
-    filtered = filtered.filter(listing => {
-      if (listing.status === 'expired') return false;
-      if (!listing.expiresAt) return true;
-      return new Date(listing.expiresAt) > new Date();
-    });
-
-    setFilteredListings(filtered);
+  const fetchRecommendedListings = async () => {
+    // TODO: Implement recommended listings API
+    setRecommendedListings([]);
   };
 
-  const updateMapCenter = (listings: FoodListing[]) => {
-    const locatedListings = listings.filter(l => l.location);
-    if (locatedListings.length > 0) {
-      const avgLat = locatedListings.reduce((sum, l) => sum + (l.location?.lat || 0), 0) / locatedListings.length;
-      const avgLng = locatedListings.reduce((sum, l) => sum + (l.location?.lng || 0), 0) / locatedListings.length;
-      setMapCenter({ lat: avgLat, lng: avgLng });
-    }
+  const fetchTrendingListings = async () => {
+    // TODO: Implement trending listings API
+    setTrendingListings([]);
   };
 
-  const handleCategorySelect = (categoryId: string) => {
-    setSelectedCategory(categoryId);
-    filterListings(categoryId, selectedStatus, selectedTags);
-  };
-
-  const handleStatusSelect = (status: string) => {
-    setSelectedStatus(status);
-    filterListings(selectedCategory, status, selectedTags);
-  };
-
-  const handleTagSelect = (tag: string) => {
-    const newTags = selectedTags.includes(tag)
-      ? selectedTags.filter(t => t !== tag)
-      : [...selectedTags, tag];
-    setSelectedTags(newTags);
-    filterListings(selectedCategory, selectedStatus, newTags);
+  const handleFilterChange = () => {
+    fetchListings();
   };
 
   const handleListingClick = (listing: FoodListing) => {
     navigate(`/listings/${listing.id}`);
   };
 
-  const handleCreateListing = () => {
-    navigate('/listings/new');
+  const handleSavedSearchApply = (filters: {
+    category?: string;
+    status?: string;
+    tags?: string[];
+    location?: {
+      lat: number;
+      lng: number;
+      address: string;
+    };
+    radius?: number;
+    priceRange?: {
+      min: number;
+      max: number;
+    };
+    sortBy?: string;
+  }) => {
+    setSelectedCategory(filters.category || '');
+    setSelectedStatus(filters.status || '');
+    setSelectedTags(filters.tags || []);
+    setLocation(filters.location?.address || '');
+    if (filters.location) {
+      setMapCenter({
+        lat: filters.location.lat,
+        lng: filters.location.lng
+      });
+    }
+    setRadius(filters.radius || 5);
+    setPriceRange([
+      filters.priceRange?.min || 0,
+      filters.priceRange?.max || 1000
+    ]);
+    setSortBy(filters.sortBy || 'relevance');
+    fetchListings();
   };
 
-  const handleViewDrafts = () => {
-    navigate('/listings/drafts');
+  const handleMapMarkerClick = (listing: FoodListing) => {
+    navigate(`/listings/${listing.id}`);
   };
 
   if (error) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <svg
-              className="w-5 h-5 text-red-400 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <span className="text-red-700">{error}</span>
-          </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700">{error}</p>
           <button
             onClick={fetchListings}
             className="mt-2 text-red-600 hover:text-red-800 font-medium"
@@ -178,65 +155,101 @@ const FoodListingsPage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header with Actions */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Food Listings</h1>
-        <div className="flex gap-4">
-          <button
-            onClick={handleViewDrafts}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-          >
-            View Drafts
-          </button>
-          <button
-            onClick={handleCreateListing}
-            className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
-          >
-            Create Listing
-          </button>
-        </div>
-      </div>
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <FoodListingHeader />
+      
+      {/* Categories Section */}
+      <FoodCategories
+        categories={[
+          { id: 'meals', name: 'Meals', icon: '🍽️', description: 'Home-cooked meals', count: 150 },
+          { id: 'groceries', name: 'Groceries', icon: '🛒', description: 'Fresh groceries', count: 89 },
+          { id: 'produce', name: 'Produce', icon: '🥬', description: 'Fresh produce', count: 67 },
+          { id: 'bakery', name: 'Bakery', icon: '🥖', description: 'Fresh baked goods', count: 45 },
+        ]}
+        selectedCategory={selectedCategory}
+        onCategorySelect={setSelectedCategory}
+      />
 
-      {/* Filters Section */}
-      <div className="mb-8">
-        <FoodListingFilters
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onCategorySelect={handleCategorySelect}
-          statuses={statuses}
-          selectedStatus={selectedStatus}
-          onStatusSelect={handleStatusSelect}
-          tags={Array.from(new Set(listings.flatMap(l => l.tags.map(t => t.name))))}
-          selectedTags={selectedTags}
-          onTagSelect={handleTagSelect}
-        />
-      </div>
-
-      {/* Map Section */}
+      {/* Map View */}
       <div className="mb-8">
         <FoodListingMap
           listings={filteredListings}
           center={mapCenter}
-          zoom={12}
-          onMarkerClick={handleListingClick}
+          zoom={mapZoom}
+          onMarkerClick={handleMapMarkerClick}
         />
       </div>
 
-      {/* Listings Grid Section */}
-      {isLoading ? (
-        <FoodListingSkeleton count={6} />
-      ) : filteredListings.length > 0 ? (
-        <FoodListingGrid
-          listings={filteredListings}
-          onListingClick={handleListingClick}
-        />
-      ) : (
-        <NoListings
-          message="No listings match your filters"
-          onCreateListing={handleCreateListing}
-        />
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Filters Sidebar */}
+        <div className="lg:col-span-1 space-y-6">
+          <FoodListingFilters
+            selectedCategory={selectedCategory}
+            onCategoryChange={setSelectedCategory}
+            selectedStatus={selectedStatus}
+            onStatusChange={setSelectedStatus}
+            selectedTags={selectedTags}
+            onTagsChange={setSelectedTags}
+            location={location}
+            onLocationChange={setLocation}
+            radius={radius}
+            onRadiusChange={setRadius}
+            priceRange={priceRange}
+            onPriceRangeChange={setPriceRange}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+          />
+
+          <SavedSearches 
+            onApplySearch={handleSavedSearchApply}
+            currentFilters={{
+              category: selectedCategory,
+              status: selectedStatus,
+              tags: selectedTags,
+              location: location ? {
+                lat: mapCenter.lat,
+                lng: mapCenter.lng,
+                address: location
+              } : undefined,
+              radius,
+              priceRange: {
+                min: priceRange[0],
+                max: priceRange[1]
+              },
+              sortBy
+            }}
+          />
+        </div>
+
+        {/* Main Content */}
+        <div className="lg:col-span-3">
+          {/* Recommended & Trending Listings */}
+          <RecommendedListings
+            recommendedListings={recommendedListings}
+            trendingListings={trendingListings}
+            onListingClick={handleListingClick}
+          />
+
+          {/* Search Results */}
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Search Results</h2>
+            {isLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+              </div>
+            ) : filteredListings.length > 0 ? (
+              <FoodListingGrid
+                listings={filteredListings}
+                onListingClick={handleListingClick}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-gray-500">No listings match your filters</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

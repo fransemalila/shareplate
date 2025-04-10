@@ -2,17 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import FoodListingDetails from '../components/food/FoodListingDetails';
 import FoodListingReviews from '../components/food/FoodListingReviews';
-import { FoodListing } from '../../../shared/src/types';
+import { FoodListing, Review } from '../types';
 import { api } from '../services/api';
-
-interface Review {
-  id: string;
-  userId: string;
-  listingId: string;
-  rating: number;
-  comment: string;
-  createdAt: Date;
-}
 
 const FoodListingDetailsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -75,7 +66,7 @@ const FoodListingDetailsPage: React.FC = () => {
   const handleAddReview = async (rating: number, comment: string) => {
     try {
       if (!id) return;
-      const response = await api.createReview(id, { rating, comment });
+      const response = await api.createReview(id, rating, comment);
       setReviews([...reviews, response]);
     } catch (err) {
       setError('Failed to add review');
@@ -83,27 +74,96 @@ const FoodListingDetailsPage: React.FC = () => {
     }
   };
 
-  const handleUpdateReview = async (reviewId: string, data: { rating: number; comment: string }) => {
+  const handleModerateReview = async (reviewId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
       if (!id) return;
-      const response = await api.updateReview(id, reviewId, data);
-      setReviews(reviews.map(review => 
-        review.id === reviewId ? response : review
-      ));
+      await api.moderateReview(id, reviewId, action, reason);
+      const updatedReviews = reviews.map(review =>
+        review.id === reviewId
+          ? {
+              ...review,
+              status: action === 'approve' ? 'approved' as const : 'rejected' as const,
+              moderationDetails: {
+                status: action === 'approve' ? 'approved' as const : 'rejected' as const,
+                reason,
+                moderatedAt: new Date().toISOString()
+              }
+            }
+          : review
+      ) as Review[];
+      setReviews(updatedReviews);
     } catch (err) {
-      setError('Failed to update review');
-      console.error('Error updating review:', err);
+      setError('Failed to moderate review');
+      console.error('Error moderating review:', err);
     }
   };
 
-  const handleDeleteReview = async (reviewId: string) => {
+  const handleAddResponse = async (reviewId: string, comment: string) => {
     try {
       if (!id) return;
-      await api.deleteReview(id, reviewId);
-      setReviews(reviews.filter(review => review.id !== reviewId));
+      const response = await api.addSellerResponse(id, reviewId, comment);
+      const updatedReviews = reviews.map(review =>
+        review.id === reviewId
+          ? { ...review, sellerResponse: response }
+          : review
+      );
+      setReviews(updatedReviews);
     } catch (err) {
-      setError('Failed to delete review');
-      console.error('Error deleting review:', err);
+      setError('Failed to add response');
+      console.error('Error adding response:', err);
+    }
+  };
+
+  const handleUpdateResponse = async (reviewId: string, responseId: string, comment: string) => {
+    try {
+      if (!id) return;
+      const response = await api.updateSellerResponse(id, reviewId, responseId, comment);
+      const updatedReviews = reviews.map(review =>
+        review.id === reviewId
+          ? { ...review, sellerResponse: response }
+          : review
+      );
+      setReviews(updatedReviews);
+    } catch (err) {
+      setError('Failed to update response');
+      console.error('Error updating response:', err);
+    }
+  };
+
+  const handleDeleteResponse = async (reviewId: string, responseId: string) => {
+    try {
+      if (!id) return;
+      await api.deleteSellerResponse(id, reviewId, responseId);
+      const updatedReviews = reviews.map(review =>
+        review.id === reviewId
+          ? { ...review, sellerResponse: undefined }
+          : review
+      );
+      setReviews(updatedReviews);
+    } catch (err) {
+      setError('Failed to delete response');
+      console.error('Error deleting response:', err);
+    }
+  };
+
+  const handleVoteReview = async (reviewId: string, vote: 'helpful' | 'not_helpful') => {
+    try {
+      if (!id) return;
+      const response = await api.voteReview(id, reviewId, vote);
+      const updatedReviews = reviews.map(review =>
+        review.id === reviewId
+          ? {
+              ...review,
+              helpfulVotes: response.helpfulVotes,
+              notHelpfulVotes: response.notHelpfulVotes,
+              voters: response.voters
+            }
+          : review
+      );
+      setReviews(updatedReviews);
+    } catch (err) {
+      setError('Failed to vote on review');
+      console.error('Error voting on review:', err);
     }
   };
 
@@ -152,7 +212,13 @@ const FoodListingDetailsPage: React.FC = () => {
       <div className="mt-8">
         <FoodListingReviews
           reviews={reviews}
+          sellerId={listing.sellerId}
           onAddReview={handleAddReview}
+          onModerateReview={handleModerateReview}
+          onAddResponse={handleAddResponse}
+          onUpdateResponse={handleUpdateResponse}
+          onDeleteResponse={handleDeleteResponse}
+          onVoteReview={handleVoteReview}
         />
       </div>
     </div>

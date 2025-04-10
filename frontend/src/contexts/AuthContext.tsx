@@ -19,6 +19,8 @@ interface AuthContextType {
   updateProfile: (data: Partial<Omit<User, 'createdAt' | 'updatedAt'>>) => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
+  verifyEmail: (code: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -250,6 +252,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const sendVerificationEmail = async () => {
+    try {
+      setError(null);
+      setIsLoading(true);
+      await api.sendVerificationEmail();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send verification email');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyEmail = async (code: string) => {
+    try {
+      setError(null);
+      setIsLoading(true);
+      const { user: userData } = await api.verifyEmail(code);
+      setUser(processUserData(userData));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Email verification failed');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const clearError = () => setError(null);
 
   return (
@@ -271,6 +300,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile,
         updatePassword,
         deleteAccount,
+        sendVerificationEmail,
+        verifyEmail,
         clearError,
       }}
     >
