@@ -6,7 +6,17 @@ export interface User {
   role: 'user' | 'admin' | 'moderator';
   isEmailVerified: boolean;
   phoneNumber?: string;
-  isPhoneVerified?: boolean;
+  isPhoneVerified: boolean;
+  twoFactorAuth: {
+    enabled: boolean;
+    method: 'sms' | 'app' | null;
+  };
+  privacySettings: {
+    showEmail: boolean;
+    showPhone: boolean;
+    showLocation: boolean;
+  };
+  status: 'active' | 'suspended' | 'banned';
   createdAt: string;
   updatedAt: string;
 }
@@ -205,6 +215,112 @@ export interface BlockedUser {
   userId: string;
   blockedUserId: string;
   reason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TwoFactorAuth {
+  enabled: boolean;
+  method: '2fa_app' | 'sms' | 'email';
+  secret?: string;
+  backupCodes?: string[];
+}
+
+export interface PrivacySettings {
+  profileVisibility: 'public' | 'private' | 'friends';
+  showEmail: boolean;
+  showPhone: boolean;
+  showLocation: boolean;
+  allowMessaging: boolean;
+}
+
+export interface UserSession {
+  id: string;
+  deviceName: string;
+  deviceType: string;
+  browser: string;
+  ipAddress: string;
+  location: string;
+  lastActive: Date;
+  createdAt: Date;
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  userId: string;
+  action: string;
+  details: Record<string, any>;
+  ipAddress: string;
+  userAgent: string;
+  createdAt: Date;
+}
+
+export interface DeviceInfo {
+  id: string;
+  userId: string;
+  name: string;
+  type: string;
+  browser: string;
+  os: string;
+  trusted: boolean;
+  lastActive: Date;
+  createdAt: Date;
+}
+
+export interface SavedListing {
+  id: string;
+  userId: string;
+  listingId: string;
+  listing: FoodListing;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface Report {
+  id: string;
+  userId: string;
+  targetType: 'listing' | 'user' | 'review' | 'message';
+  targetId: string;
+  reason: string;
+  details: string;
+  status: 'pending' | 'investigating' | 'resolved' | 'dismissed';
+  moderatorNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FAQCategory {
+  id: string;
+  title: string;
+  description: string;
+  order: number;
+}
+
+export interface FAQItem {
+  id: string;
+  categoryId: string;
+  question: string;
+  answer: string;
+  order: number;
+}
+
+export interface SupportTicket {
+  id: string;
+  subject: string;
+  description: string;
+  category: 'general' | 'technical' | 'billing' | 'report';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'closed' | 'pending';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  content: string;
+  isStaffResponse: boolean;
+  attachments?: string[];
   createdAt: string;
   updatedAt: string;
 } 

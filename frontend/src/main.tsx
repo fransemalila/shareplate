@@ -1,31 +1,29 @@
 import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Workbox, WorkboxLifecycleEvent } from 'workbox-window';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
+import { BrowserRouter } from 'react-router-dom';
 
-// Register service worker
-if ('serviceWorker' in navigator) {
-  const wb = new Workbox('/service-worker.ts');
-  
-  wb.addEventListener('installed', (event: WorkboxLifecycleEvent) => {
-    if (event.isUpdate) {
-      if (confirm('New content is available! Click OK to refresh.')) {
-        window.location.reload();
-      }
-    }
-  });
-
-  wb.register().catch((error: Error) => {
-    console.error('Service worker registration failed:', error);
+// Register service worker only in production
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('SW registered:', registration);
+      })
+      .catch(error => {
+        console.log('SW registration failed:', error);
+      });
   });
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
   </React.StrictMode>
 ); 

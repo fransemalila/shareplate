@@ -1,32 +1,46 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { configDefaults } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true, // This enables listening on all network interfaces
-    strictPort: false, // Allow fallback to another port if 3000 is in use
+    strictPort: false,
+    host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
-      }
-    }
+        secure: false,
+      },
+    },
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'mapbox-gl': 'mapbox-gl',
     },
   },
-  css: {
-    preprocessorOptions: {
-      css: {
-        additionalData: `@import "mapbox-gl/dist/mapbox-gl.css";`,
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+        },
       },
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/setupTests.ts'],
+    exclude: [...configDefaults.exclude, '**/e2e/**'],
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+      exclude: ['node_modules/', 'src/setupTests.ts']
+    }
   }
 }); 

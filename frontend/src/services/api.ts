@@ -38,7 +38,7 @@ interface VerificationResponse {
   user: User;
 }
 
-class Api {
+export class Api {
   private token: string | null = null;
   private axiosInstance = axios.create({
     baseURL: BASE_URL,

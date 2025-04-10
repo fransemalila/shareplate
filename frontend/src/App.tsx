@@ -6,6 +6,15 @@ import { LoginPage } from './pages/LoginPage';
 import { RequestPasswordReset } from './components/auth/RequestPasswordReset';
 import { ResetPassword } from './components/auth/ResetPassword';
 import { ProfileManagement } from './components/auth/ProfileManagement';
+import SecuritySettingsPage from './pages/SecuritySettingsPage';
+import HelpPage from './pages/HelpPage';
+import SupportPage from './pages/SupportPage';
+import AdminLayout from './components/layout/AdminLayout';
+import DashboardPage from './pages/admin/DashboardPage';
+import UsersPage from './pages/admin/UsersPage';
+import ContentPage from './pages/admin/ContentPage';
+import AnalyticsPage from './pages/admin/AnalyticsPage';
+import SettingsPage from './pages/admin/SettingsPage';
 import './index.css';
 
 function App() {
@@ -18,6 +27,8 @@ function App() {
       console.error('Logout failed:', error);
     }
   };
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <Router>
@@ -37,11 +48,31 @@ function App() {
               <div className="flex items-center space-x-4">
                 {user ? (
                   <>
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        className="text-gray-700 hover:text-gray-900"
+                      >
+                        Admin
+                      </Link>
+                    )}
                     <Link
                       to="/profile"
                       className="text-gray-700 hover:text-gray-900"
                     >
                       Profile
+                    </Link>
+                    <Link
+                      to="/help"
+                      className="text-gray-700 hover:text-gray-900"
+                    >
+                      Help
+                    </Link>
+                    <Link
+                      to="/support"
+                      className="text-gray-700 hover:text-gray-900"
+                    >
+                      Support
                     </Link>
                     <button
                       onClick={handleLogout}
@@ -78,6 +109,21 @@ function App() {
           <Route path="/request-password-reset" element={<RequestPasswordReset />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/profile" element={<ProfileManagement />} />
+          <Route path="/settings/security" element={<SecuritySettingsPage />} />
+          <Route path="/help" element={<HelpPage />} />
+          <Route path="/support" element={<SupportPage />} />
+
+          {/* Admin Routes */}
+          {isAdmin && (
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<DashboardPage />} />
+              <Route path="users" element={<UsersPage />} />
+              <Route path="content" element={<ContentPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="support" element={<SupportPage />} />
+            </Route>
+          )}
         </Routes>
       </div>
     </Router>
