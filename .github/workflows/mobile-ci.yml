@@ -1,0 +1,125 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'mobile/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'mobile/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16.x'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: mobile
+      run: npm ci
+      
+    - name: Run tests
+      working-directory: mobile
+      run: npm test
+      
+    - name: Run linter
+      working-directory: mobile
+      run: npm run lint
+      
+    - name: Run type check
+      working-directory: mobile
+      run: npm run type-check
+
+  build-android:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '11'
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Install dependencies
+      working-directory: mobile
+      run: npm ci
+      
+    - name: Build Android Release
+      working-directory: mobile/android
+      run: |
+        ./gradlew assembleRelease
+      env:
+        ANDROID_SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+        ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        
+    - name: Upload Android Release
+      uses: actions/upload-artifact@v2
+      with:
+        name: android-release
+        path: mobile/android/app/build/outputs/apk/release/app-release.apk
+
+  build-ios:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16.x'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: mobile
+      run: |
+        npm ci
+        cd ios && pod install
+        
+    - name: Build iOS Release
+      working-directory: mobile/ios
+      run: |
+        xcodebuild -workspace SharePlate.xcworkspace \
+          -scheme SharePlate \
+          -configuration Release \
+          -archivePath $PWD/build/SharePlate.xcarchive \
+          clean archive
+      env:
+        DEVELOPER_APP_ID: ${{ secrets.DEVELOPER_APP_ID }}
+        PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.PROVISIONING_PROFILE_SPECIFIER }}
+        DEVELOPER_PORTAL_TEAM_ID: ${{ secrets.DEVELOPER_PORTAL_TEAM_ID }}
+        
+    - name: Upload iOS Release
+      uses: actions/upload-artifact@v2
+      with:
+        name: ios-release
+        path: mobile/ios/build/SharePlate.xcarchive 

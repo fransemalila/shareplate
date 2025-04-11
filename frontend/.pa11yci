@@ -1,0 +1,73 @@
+{
+  "defaults": {
+    "timeout": 10000,
+    "wait": 1000,
+    "standard": "WCAG2AA",
+    "ignore": [
+      "WCAG2AA.Principle1.Guideline1_4.1_4_3.G18.Fail"
+    ],
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "chromeLaunchConfig": {
+      "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    },
+    "reporters": ["cli", "json"],
+    "log": {
+      "debug": true,
+      "error": true
+    }
+  },
+  "urls": [
+    {
+      "url": "${BASE_URL}/",
+      "screenCapture": "./pa11y-screenshots/home.png",
+      "timeout": 20000,
+      "actions": [
+        "wait for element body to be visible",
+        "wait for .main-content to be visible"
+      ]
+    },
+    {
+      "url": "${BASE_URL}/listings",
+      "screenCapture": "./pa11y-screenshots/listings.png",
+      "timeout": 20000,
+      "actions": [
+        "wait for element body to be visible",
+        "wait for element #listings-grid to be visible",
+        "wait for .listing-card to be visible"
+      ]
+    },
+    {
+      "url": "${BASE_URL}/profile",
+      "screenCapture": "./pa11y-screenshots/profile.png",
+      "timeout": 20000,
+      "actions": [
+        "wait for element body to be visible",
+        "wait for element #profile-content to be visible",
+        "wait for .profile-section to be visible"
+      ]
+    },
+    {
+      "url": "${BASE_URL}/orders",
+      "screenCapture": "./pa11y-screenshots/orders.png",
+      "timeout": 20000,
+      "actions": [
+        "wait for element body to be visible",
+        "wait for element #orders-list to be visible",
+        "wait for .order-item to be visible"
+      ]
+    },
+    {
+      "url": "${BASE_URL}/create-listing",
+      "screenCapture": "./pa11y-screenshots/create-listing.png",
+      "timeout": 20000,
+      "actions": [
+        "wait for element body to be visible",
+        "wait for element #listing-form to be visible",
+        "wait for .form-section to be visible"
+      ]
+    }
+  ]
+} 

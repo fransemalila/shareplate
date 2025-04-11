@@ -1,4 +1,5 @@
-import mongoose from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 interface UserSettings {
   notifications?: {
@@ -18,88 +19,131 @@ interface UserSettings {
   };
 }
 
-export interface IUser extends mongoose.Document {
+export interface IUser extends Document {
   email: string;
-  password: string;
+  password?: string;
   name: string;
-  phoneNumber?: string;
   isEmailVerified: boolean;
-  isPhoneVerified?: boolean;
-  verificationToken?: string;
-  resetPasswordToken?: string;
-  resetPasswordExpires?: Date;
+  google?: {
+    id: string;
+    email: string;
+  };
+  facebook?: {
+    id: string;
+    email: string;
+  };
+  apple?: {
+    id: string;
+    email: string;
+  };
   role: 'user' | 'admin' | 'moderator';
-  settings?: UserSettings;
+  phoneNumber?: string;
+  isPhoneVerified: boolean;
+  twoFactorAuth: boolean;
+  privacySettings: {
+    shareEmail: boolean;
+    sharePhone: boolean;
+    notifications: boolean;
+  };
+  status: 'active' | 'suspended' | 'deleted';
   createdAt: Date;
   updatedAt: Date;
+  comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-const userSchema = new mongoose.Schema({
+const userSchema = new Schema<IUser>({
   email: {
     type: String,
     required: true,
     unique: true,
     trim: true,
-    lowercase: true,
+    lowercase: true
   },
   password: {
     type: String,
-    required: true,
+    required: function() {
+      return !this.google && !this.facebook && !this.apple;
+    },
+    minlength: 8
   },
   name: {
     type: String,
     required: true,
-    trim: true,
-  },
-  phoneNumber: {
-    type: String,
-    trim: true,
+    trim: true
   },
   isEmailVerified: {
     type: Boolean,
-    default: false,
+    default: false
   },
-  isPhoneVerified: {
-    type: Boolean,
-    default: false,
+  google: {
+    id: String,
+    email: String
   },
-  verificationToken: String,
-  resetPasswordToken: String,
-  resetPasswordExpires: Date,
+  facebook: {
+    id: String,
+    email: String
+  },
+  apple: {
+    id: String,
+    email: String
+  },
   role: {
     type: String,
     enum: ['user', 'admin', 'moderator'],
-    default: 'user',
+    default: 'user'
   },
-  settings: {
+  phoneNumber: String,
+  isPhoneVerified: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorAuth: {
+    type: Boolean,
+    default: false
+  },
+  privacySettings: {
+    shareEmail: {
+      type: Boolean,
+      default: false
+    },
+    sharePhone: {
+      type: Boolean,
+      default: false
+    },
     notifications: {
-      email: { type: Boolean, default: true },
-      push: { type: Boolean, default: true },
-      sms: { type: Boolean, default: false },
-    },
-    privacy: {
-      profileVisibility: { type: String, enum: ['public', 'private'], default: 'public' },
-      showEmail: { type: Boolean, default: false },
-      showPhone: { type: Boolean, default: false },
-    },
-    preferences: {
-      language: { type: String, default: 'en' },
-      currency: { type: String, default: 'USD' },
-      theme: { type: String, enum: ['light', 'dark'], default: 'light' },
-    },
+      type: Boolean,
+      default: true
+    }
   },
+  status: {
+    type: String,
+    enum: ['active', 'suspended', 'deleted'],
+    default: 'active'
+  }
 }, {
-  timestamps: true,
+  timestamps: true
 });
 
-// Remove sensitive information when converting to JSON
-userSchema.methods.toJSON = function() {
-  const user = this.toObject();
-  delete user.password;
-  delete user.verificationToken;
-  delete user.resetPasswordToken;
-  delete user.resetPasswordExpires;
-  return user;
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (this.isModified('password') && this.password) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
+  next();
+});
+
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  if (!this.password) return false;
+  return bcrypt.compare(candidatePassword, this.password);
 };
+
+// Create indexes
+userSchema.index({ email: 1 });
+userSchema.index({ 'google.id': 1 });
+userSchema.index({ 'facebook.id': 1 });
+userSchema.index({ 'apple.id': 1 });
+userSchema.index({ status: 1 });
 
 export const User = mongoose.model<IUser>('User', userSchema); 

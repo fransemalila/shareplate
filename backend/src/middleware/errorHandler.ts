@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ValidationError } from 'express-validator';
 import { logger } from '../utils/logger';
+import { AppError } from '../utils/errors';
 
 export class AppError extends Error {
   constructor(
@@ -44,56 +45,92 @@ const handleJWTExpiredError = (): AppError =>
   new AppError(401, 'Your token has expired. Please log in again.');
 
 export const errorHandler = (
-  err: Error,
+  err: Error | AppError,
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  let error = err as AppError;
-  error.statusCode = error.statusCode || 500;
-
   // Log error
-  logger.error({
-    error: {
-      message: error.message,
-      stack: error.stack,
-      statusCode: error.statusCode
-    },
+  console.error('Error:', {
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
     path: req.path,
     method: req.method,
-    requestId: req.id
   });
 
-  if (process.env.NODE_ENV === 'development') {
-    const errorResponse: ErrorResponse = {
-      status: error.statusCode >= 500 ? 'error' : 'fail',
-      message: error.message,
-      stack: error.stack,
-      errors: null
-    };
-
-    if (err instanceof Array && err[0] instanceof ValidationError) {
-      error = handleValidationError(err);
-      errorResponse.errors = err;
-    }
-
-    return res.status(error.statusCode).json(errorResponse);
-  }
-
-  // Production error handling
-  if (error.isOperational) {
-    // Operational, trusted error: send message to client
-    return res.status(error.statusCode).json({
-      status: error.statusCode >= 500 ? 'error' : 'fail',
-      message: error.message
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      status: 'error',
+      message: err.message,
+      errors: err.errors,
+      code: err.statusCode,
     });
   }
 
-  // Programming or other unknown error: don't leak error details
-  logger.error('ERROR 💥:', error);
+  // Handle mongoose validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Validation Error',
+      errors: Object.values(err).map((e: any) => ({
+        field: e.path,
+        message: e.message,
+      })),
+      code: 400,
+    });
+  }
+
+  // Handle mongoose duplicate key errors
+  if (err.name === 'MongoError' && (err as any).code === 11000) {
+    return res.status(409).json({
+      status: 'error',
+      message: 'Duplicate field value entered',
+      code: 409,
+    });
+  }
+
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Invalid token',
+      code: 401,
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Token expired',
+      code: 401,
+    });
+  }
+
+  // Handle multer errors
+  if (err.name === 'MulterError') {
+    return res.status(400).json({
+      status: 'error',
+      message: err.message,
+      code: 400,
+    });
+  }
+
+  // If in development, send error details
+  if (process.env.NODE_ENV === 'development') {
+    return res.status(500).json({
+      status: 'error',
+      message: err.message,
+      stack: err.stack,
+      code: 500,
+    });
+  }
+
+  // Production error - don't leak error details
   return res.status(500).json({
     status: 'error',
-    message: 'Something went wrong!'
+    message: 'Internal server error',
+    code: 500,
   });
 };
 

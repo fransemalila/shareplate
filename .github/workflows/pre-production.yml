@@ -1,0 +1,253 @@
+name: Pre-Production Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to run tests against'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - pre-production
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    services:
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run API Integration Tests
+        working-directory: backend
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/shareplate_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test_secret
+          API_URL: ${{ secrets.API_URL }}
+
+      - name: Run Frontend Integration Tests
+        working-directory: frontend
+        run: npm run test:integration
+        env:
+          VITE_API_URL: ${{ secrets.API_URL }}
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Cypress
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Cypress Tests
+        working-directory: frontend
+        run: npm run test:e2e
+        env:
+          CYPRESS_BASE_URL: ${{ secrets.APP_URL }}
+          CYPRESS_API_URL: ${{ secrets.API_URL }}
+
+  load-tests:
+    name: Load Tests
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup k6
+        run: |
+          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run Load Tests
+        working-directory: backend/tests/load
+        run: k6 run load-test.js
+        env:
+          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+          TARGET_URL: ${{ secrets.API_URL }}
+
+  accessibility-tests:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Pa11y Tests
+        working-directory: frontend
+        run: |
+          npm install -g pa11y-ci
+          pa11y-ci --config .pa11yci
+        env:
+          BASE_URL: ${{ secrets.APP_URL }}
+
+  mobile-integration:
+    name: Mobile Integration Tests
+    runs-on: macos-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Install Dependencies
+        working-directory: mobile
+        run: |
+          npm ci
+          gem install fastlane
+          cd ios && pod install && cd ..
+
+      - name: Run iOS Integration Tests
+        working-directory: mobile
+        run: fastlane ios test
+        env:
+          API_URL: ${{ secrets.API_URL }}
+
+      - name: Run Android Integration Tests
+        working-directory: mobile
+        run: fastlane android test
+        env:
+          API_URL: ${{ secrets.API_URL }}
+
+  security-compliance:
+    name: Security Compliance Check
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Run ZAP Scan
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+          target: ${{ secrets.APP_URL }}
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+  performance-audit:
+    name: Performance Audit
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v9
+        with:
+          urls: ${{ secrets.APP_URL }}
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          configPath: ./lighthouse-config.json
+
+  test-report:
+    name: Generate Test Report
+    needs: [integration-tests, e2e-tests, load-tests, accessibility-tests, mobile-integration, security-compliance, performance-audit]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download Test Reports
+        uses: actions/download-artifact@v3
+        with:
+          path: test-reports
+
+      - name: Generate Combined Report
+        run: |
+          echo "# Pre-Production Test Results" > test-report.md
+          echo "## Integration Tests" >> test-report.md
+          find test-reports -name "*integration*.xml" -exec cat {} >> test-report.md \;
+          echo "## E2E Tests" >> test-report.md
+          find test-reports -name "*cypress*.xml" -exec cat {} >> test-report.md \;
+          echo "## Load Tests" >> test-report.md
+          find test-reports -name "*k6*.json" -exec cat {} >> test-report.md \;
+          echo "## Accessibility Tests" >> test-report.md
+          find test-reports -name "*pa11y*.json" -exec cat {} >> test-report.md \;
+          echo "## Security Tests" >> test-report.md
+          find test-reports -name "*zap*.json" -exec cat {} >> test-report.md \;
+          echo "## Performance Tests" >> test-report.md
+          find test-reports -name "*lighthouse*.json" -exec cat {} >> test-report.md \;
+
+      - name: Upload Combined Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: pre-production-test-report
+          path: test-report.md
+
+      - name: Create Issue on Failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Pre-Production Tests Failed',
+              body: 'Pre-production tests have failed. Please check the test report for details.',
+              labels: ['testing', 'critical']
+            }); 
